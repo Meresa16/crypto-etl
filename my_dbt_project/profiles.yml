@@ -1,0 +1,11 @@
+my_dbt_project: # This must match the 'name' in your dbt_project.yml
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: loyal-weaver-471905-p9
+      dataset: dbt_prod
+      threads: 1
+      keyfile: ../gcp_key.json # It looks for the key in the main folder
+      location: US

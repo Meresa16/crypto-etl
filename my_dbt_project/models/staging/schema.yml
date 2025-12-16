@@ -1,0 +1,6 @@
+version: 2
+sources:
+  - name: crypto_raw
+    database: loyal-weaver-471905-p9 # REPLACE THIS
+    tables:
+      - name: daily_market

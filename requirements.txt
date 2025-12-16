@@ -1,0 +1,5 @@
+pandas
+requests
+pandas-gbq
+google-cloud-bigquery
+dbt-bigquery
