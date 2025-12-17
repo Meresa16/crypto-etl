@@ -19,8 +19,10 @@
 SELECT
     id as coin_id,
     symbol,
+    name,
     current_price as price_usd,
     market_cap,
+    total_volume, -- <--- Added this column!
     last_updated,
     CAST(loaded_at as DATE) as report_date
 FROM {{ source('crypto_raw', 'daily_market') }}
