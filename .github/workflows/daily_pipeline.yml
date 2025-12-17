@@ -25,9 +25,13 @@ jobs:
       - name: Install Dependencies
         run: pip install pandas pandas-gbq dbt-bigquery requests
 
-      # This step creates the key file from the GitHub Secret
+      # # This step creates the key file from the GitHub Secret
+      # - name: Create Key File
+      #   run: echo "${{ secrets.GCP_SA_KEY }}" > gcp_key.json
       - name: Create Key File
-        run: echo "${{ secrets.GCP_SA_KEY }}" > gcp_key.json
+        env:
+          GCP_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: echo "$GCP_KEY" > gcp_key.json
 
       - name: Run Extraction Script
         run: python scripts/ingest.py

@@ -7,5 +7,5 @@ SELECT
         PARTITION BY symbol 
         ORDER BY report_date 
         ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-    ) as 7_day_moving_avg
+    ) as moving_avg_7d
 FROM {{ ref('stg_crypto') }}
