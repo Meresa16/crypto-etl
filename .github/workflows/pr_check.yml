@@ -1,0 +1,38 @@
+name: CI Check (Pull Requests)
+
+on:
+  pull_request:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: loyal-weaver-471905-p9
+  GCP_KEY_FILE: ./gcp_key.json
+
+jobs:
+  dbt-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dbt
+        run: pip install dbt-bigquery
+
+      - name: Create Key
+        env:
+          GCP_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          python -c "import os; open('gcp_key.json', 'w').write(os.environ['GCP_KEY'])"
+
+      - name: Run dbt in CI mode
+        working-directory: ./my_dbt_project
+        run: |
+          dbt deps
+          # Run dbt compile to check for SQL syntax errors
+          dbt compile --profiles-dir .
+        env:
+          GCP_PROJECT: ${{ env.PROJECT_ID }}
