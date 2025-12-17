@@ -10,12 +10,9 @@
 
 
 
-
-
 {{
     config(
-        materialized='incremental',
-        unique_key='coin_id' 
+        materialized='view'
     )
 }}
 
@@ -27,8 +24,5 @@ SELECT
     last_updated,
     CAST(loaded_at as DATE) as report_date
 FROM {{ source('crypto_raw', 'daily_market') }}
-
-{% if is_incremental() %}
-  -- If this runs incrementally, only pick up data newer than what we already have
-  WHERE loaded_at > (SELECT MAX(report_date) FROM {{ this }})
-{% endif %}
+-- We remove the incremental logic because Sandbox doesn't support it
+QUALIFY ROW_NUMBER() OVER (PARTITION BY id, CAST(loaded_at as DATE) ORDER BY loaded_at DESC) = 1

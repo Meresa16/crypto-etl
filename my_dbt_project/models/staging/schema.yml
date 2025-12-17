@@ -8,7 +8,6 @@
 
 
 
-
 version: 2
 
 sources:
@@ -17,6 +16,7 @@ sources:
     tables:
       - name: daily_market
         loaded_at_field: loaded_at
+        # Indent this block so it belongs to the table
         freshness:
           warn_after: {count: 24, period: hour}
           error_after: {count: 48, period: hour}
