@@ -2,7 +2,7 @@ name: Daily Crypto Pipeline
 
 on:
   schedule:
-    - cron: '0 8 * * *' # Runs every day at 8:00 AM UTC
+    - cron: "0 8 * * *" # Runs every day at 8:00 AM UTC
   workflow_dispatch: # Allows you to run it manually from GitHub
 
 env:
@@ -20,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: "3.9"
 
       - name: Install Dependencies
         run: pip install pandas pandas-gbq dbt-bigquery requests
@@ -28,10 +28,18 @@ jobs:
       # # This step creates the key file from the GitHub Secret
       # - name: Create Key File
       #   run: echo "${{ secrets.GCP_SA_KEY }}" > gcp_key.json
+      # - name: Create Key File
+      #   env:
+      #     GCP_KEY: ${{ secrets.GCP_SA_KEY }}
+      #   run: echo "$GCP_KEY" > gcp_key.json
+            # --- THIS IS THE FIX ---
+      # We use Python to write the file because it handles quotes safely.
       - name: Create Key File
         env:
           GCP_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: echo "$GCP_KEY" > gcp_key.json
+        run: |
+          python -c "import os; open('gcp_key.json', 'w').write(os.environ['GCP_KEY'])"
+      # -----------------------
 
       - name: Run Extraction Script
         run: python scripts/ingest.py
