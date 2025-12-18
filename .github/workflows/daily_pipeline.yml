@@ -22,29 +22,20 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Install Dependencies
-        run: pip install pandas pandas-gbq dbt-bigquery requests
+      # --- FIX IS HERE: Forced upgrade and clean install ---
+      - name: Install Dependencies (Fixed)
+        run: pip install --upgrade --no-cache-dir pandas pandas-gbq dbt-bigquery requests
+      # ----------------------------------------------------
 
-      # # This step creates the key file from the GitHub Secret
-      # - name: Create Key File
-      #   run: echo "${{ secrets.GCP_SA_KEY }}" > gcp_key.json
-      # - name: Create Key File
-      #   env:
-      #     GCP_KEY: ${{ secrets.GCP_SA_KEY }}
-      #   run: echo "$GCP_KEY" > gcp_key.json
-            # --- THIS IS THE FIX ---
-      # We use Python to write the file because it handles quotes safely.
       - name: Create Key File
         env:
           GCP_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           python -c "import os; open('gcp_key.json', 'w').write(os.environ['GCP_KEY'])"
-      # -----------------------
-
+      
       - name: Run Extraction Script
         run: python scripts/ingest.py
 
-      # We need to configure dbt to see the key and project
       - name: Run dbt
         working-directory: ./my_dbt_project
         run: |
