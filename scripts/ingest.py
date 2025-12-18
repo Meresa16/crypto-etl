@@ -92,6 +92,8 @@
 
 
 
+
+
 import pandas as pd
 import pandas_gbq
 import requests
@@ -101,6 +103,7 @@ from datetime import datetime
 from google.oauth2 import service_account
 import time
 import sys
+import requests.exceptions
 
 # --- CONFIGURATION ---
 PROJECT_ID = 'loyal-weaver-471905-p9' 
@@ -109,22 +112,23 @@ TABLE_ID = 'daily_market'
 CREDENTIALS_PATH = 'gcp_key.json'
 
 # --- API CONSTANTS ---
-COINS_PER_PAGE = 250 # Max allowed by CoinGecko (at time of writing)
+COINS_PER_PAGE = 250 
 BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
-RATE_LIMIT_DELAY = 1.5 # Increased delay between successful calls (1.5 seconds)
-ERROR_RETRY_DELAY = 10 # Longer delay after hitting 429 error (10 seconds)
+RATE_LIMIT_DELAY = 1.5 
+ERROR_RETRY_DELAY = 10 
 
-# --- THE UPGRADE: Fetch ALL Pages ---
+# --- FUNCTION: Fetch ALL Pages ---
 def fetch_all_crypto_data():
+    """Loops through all CoinGecko pages to get full market data."""
     all_data = []
     page = 1
     
-    # Headers to look like a real browser request
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
     while True:
+        # Status update in console
         sys.stdout.write(f"\r🔍 Fetching page {page} (Assets {((page-1)*COINS_PER_PAGE) + 1} - {page*COINS_PER_PAGE})...")
         sys.stdout.flush()
         
@@ -139,10 +143,11 @@ def fetch_all_crypto_data():
             response = requests.get(BASE_URL, params=params, headers=headers, timeout=60)
             response.raise_for_status()
             page_data = response.json()
+        
         except requests.exceptions.HTTPError as e:
-            # --- RATE LIMIT HANDLER ---
+            # Handle 429 Rate Limit specifically
             if response.status_code == 429:
-                print(f"\n🛑 RATE LIMIT HIT on page {page}. Waiting for {ERROR_RETRY_DELAY}s to cool down...")
+                print(f"\n🛑 RATE LIMIT HIT on page {page}. Waiting for {ERROR_RETRY_DELAY}s...")
                 time.sleep(ERROR_RETRY_DELAY)
                 continue # Try the same page again
             else:
@@ -154,15 +159,15 @@ def fetch_all_crypto_data():
             time.sleep(5)
             continue
         
-        # Check for end condition
+        # Check for end condition (API returns empty list)
         if not page_data:
-            print(f"\n✅ Finished! Reached end of data on page {page-1}. Total unique assets loaded: {len(all_data)}")
+            print(f"\n✅ Finished! Total assets loaded: {len(all_data)}")
             break
             
         all_data.extend(page_data)
         page += 1
         
-        # --- SAFE DELAY ---
+        # Safe delay to prevent rate limit hits
         time.sleep(RATE_LIMIT_DELAY)
 
     return all_data
@@ -177,10 +182,10 @@ def main():
         print("🛑 No data fetched. Exiting.")
         sys.exit(1)
 
-    # 2. TRANSFORM
+    # 2. TRANSFORM (Create DataFrame)
     df = pd.DataFrame(data)
     
-    # --- Select ALL Desired Columns (Safety check) ---
+    # --- Select ALL Desired Columns ---
     desired_columns = [
         'id', 'symbol', 'name', 'image', 'current_price', 'market_cap', 
         'market_cap_rank', 'total_volume', 'high_24h', 'low_24h', 
@@ -192,7 +197,7 @@ def main():
     df['loaded_at'] = datetime.now()
     
     # 3. AUTHENTICATION & LOAD
-    print(f"📦 Preparing to load {len(df)} records to BigQuery...")
+    print(f"📦 Preparing to load {len(df)} records to BigQuery via InsertAll method...")
     credentials = None
     if os.path.exists(CREDENTIALS_PATH):
         try:
@@ -201,6 +206,7 @@ def main():
             print("❌ CRITICAL ERROR: The gcp_key.json file is corrupt.")
             sys.exit(1)
     
+    # --- BEST PRACTICE FOR STABILITY: Use insert_all ---
     try:
         pandas_gbq.to_gbq(
             df,
@@ -208,11 +214,32 @@ def main():
             project_id=PROJECT_ID,
             if_exists='append',
             credentials=credentials,
-            table_schema=[{'name': 'image', 'type': 'STRING'}, {'name': 'market_cap_rank', 'type': 'INTEGER'}] 
+            # Use the CSV-based API method for maximum stability on GitHub runners
+            api_method='insert_all', 
+            # Explicit Schema is essential for insert_all to know the BQ column types
+            table_schema=[
+                {'name': 'id', 'type': 'STRING'},
+                {'name': 'symbol', 'type': 'STRING'},
+                {'name': 'name', 'type': 'STRING'},
+                {'name': 'image', 'type': 'STRING'},
+                {'name': 'current_price', 'type': 'FLOAT'},
+                {'name': 'market_cap', 'type': 'FLOAT'},
+                {'name': 'market_cap_rank', 'type': 'INTEGER'},
+                {'name': 'total_volume', 'type': 'FLOAT'},
+                {'name': 'high_24h', 'type': 'FLOAT'},
+                {'name': 'low_24h', 'type': 'FLOAT'},
+                {'name': 'price_change_percentage_24h', 'type': 'FLOAT'},
+                {'name': 'circulating_supply', 'type': 'FLOAT'},
+                {'name': 'total_supply', 'type': 'FLOAT'},
+                {'name': 'ath', 'type': 'FLOAT'},
+                {'name': 'ath_change_percentage', 'type': 'FLOAT'},
+                {'name': 'last_updated', 'type': 'TIMESTAMP'},
+                {'name': 'loaded_at', 'type': 'TIMESTAMP'} 
+            ]
         )
         print(f"✅ Success! Loaded {len(df)} assets to BigQuery.")
     except Exception as e:
-        print(f"🔥 BigQuery Load Error: {e}")
+        print(f"🔥 CRITICAL BigQuery Load Error: Failed to load data. {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
