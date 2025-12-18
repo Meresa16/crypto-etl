@@ -221,39 +221,98 @@ def main():
             sys.exit(1)
     
     # --- FINAL STABLE LOAD BLOCK ---
-    try:
-        pandas_gbq.to_gbq(
-            df,
-            destination_table=f"{DATASET_ID}.{TABLE_ID}",
-            project_id=PROJECT_ID,
-            if_exists='append',
-            credentials=credentials,
-            # Use the robust load_csv method for maximum stability
-            api_method='load_csv', 
-            chunksize=1000, # Helps BigQuery parse large CSV strings
-            decimal='.', # Explicitly defines decimal separator
-            # Explicit Schema Definition (Ensuring FLOAT for all currency/volume fields)
-            table_schema=[
-                {'name': 'id', 'type': 'STRING'},
-                {'name': 'symbol', 'type': 'STRING'},
-                {'name': 'name', 'type': 'STRING'},
-                {'name': 'image', 'type': 'STRING'},
-                {'name': 'current_price', 'type': 'FLOAT'},
-                {'name': 'market_cap', 'type': 'FLOAT'},
-                {'name': 'market_cap_rank', 'type': 'INTEGER'},
-                {'name': 'total_volume', 'type': 'FLOAT'},
-                {'name': 'high_24h', 'type': 'FLOAT'},
-                {'name': 'low_24h', 'type': 'FLOAT'},
-                {'name': 'price_change_percentage_24h', 'type': 'FLOAT'},
-                {'name': 'circulating_supply', 'type': 'FLOAT'},
-                {'name': 'total_supply', 'type': 'FLOAT'},
-                {'name': 'ath', 'type': 'FLOAT'},
-                {'name': 'ath_change_percentage', 'type': 'FLOAT'},
-                {'name': 'last_updated', 'type': 'TIMESTAMP'},
-                {'name': 'loaded_at', 'type': 'TIMESTAMP'} 
-            ]
-        )
-        print(f"✅ Success! Loaded {len(df)} assets to BigQuery.")
+    
+
+# --- MAIN EXECUTION ---
+def main():
+    print("--- ETL START ---")
+    
+    # 1. EXTRACT ALL DATA
+    data = fetch_all_crypto_data()
+    if not data:
+        print("🛑 No data fetched. Exiting.")
+        sys.exit(1)
+
+    # 2. TRANSFORM (Create DataFrame)
+    df = pd.DataFrame(data)
+    
+    # --- Select ALL Desired Columns ---
+    desired_columns = [
+        'id', 'symbol', 'name', 'image', 'current_price', 'market_cap', 
+        'market_cap_rank', 'total_volume', 'high_24h', 'low_24h', 
+        'price_change_percentage_24h', 'circulating_supply', 'total_supply', 
+        'ath', 'ath_change_percentage', 'last_updated'
+    ]
+    cols_to_keep = [col for col in desired_columns if col in df.columns]
+    df = df[cols_to_keep]
+
+    # --- CRITICAL FIX: Explicitly cast float columns to prevent INT64 parsing errors ---
+    float_cols = ['current_price', 'market_cap', 'total_volume', 'high_24h', 'low_24h', 'circulating_supply', 'total_supply', 'ath', 'ath_change_percentage', 'price_change_percentage_24h']
+    for col_name in float_cols:
+        if col_name in df.columns:
+            # pd.to_numeric with errors='coerce' safely turns invalid strings into NaN
+            df[col_name] = pd.to_numeric(df[col_name], errors='coerce') 
+
+    # Add the load timestamp
+    df['loaded_at'] = datetime.now()
+    
+    # 3. AUTHENTICATION & LOAD
+    print(f"📦 Preparing to load {len(df)} records to BigQuery via load_csv method...")
+    credentials = None
+    if os.path.exists(CREDENTIALS_PATH):
+        try:
+            credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
+        except json.JSONDecodeError:
+            print("❌ CRITICAL ERROR: The gcp_key.json file is corrupt.")
+            sys.exit(1)
+    
+    # --- FINAL STABLE LOAD BLOCK ---
+# --- FINAL STABLE LOAD BLOCK ---
+try:
+    pandas_gbq.to_gbq(
+        df,
+        destination_table=f"{DATASET_ID}.{TABLE_ID}",
+        project_id=PROJECT_ID,
+        if_exists='append',
+        credentials=credentials,
+        # Use the robust load_csv method for maximum stability
+        api_method='load_csv', 
+        # Increased chunksize for better stability
+        chunksize=2000, 
+        # REMOVED: decimal='.' (This keyword is causing the error)
+        # Explicit Schema Definition (Ensuring FLOAT for all currency/volume fields)
+        table_schema=[
+            {'name': 'id', 'type': 'STRING'},
+            {'name': 'symbol', 'type': 'STRING'},
+            {'name': 'name', 'type': 'STRING'},
+            {'name': 'image', 'type': 'STRING'},
+            {'name': 'current_price', 'type': 'FLOAT'},
+            {'name': 'market_cap', 'type': 'FLOAT'},
+            {'name': 'market_cap_rank', 'type': 'INTEGER'},
+            {'name': 'total_volume', 'type': 'FLOAT'},
+            {'name': 'high_24h', 'type': 'FLOAT'},
+            {'name': 'low_24h', 'type': 'FLOAT'},
+            {'name': 'price_change_percentage_24h', 'type': 'FLOAT'},
+            {'name': 'circulating_supply', 'type': 'FLOAT'},
+            {'name': 'total_supply', 'type': 'FLOAT'},
+            {'name': 'ath', 'type': 'FLOAT'},
+            {'name': 'ath_change_percentage', 'type': 'FLOAT'},
+            {'name': 'last_updated', 'type': 'TIMESTAMP'},
+            {'name': 'loaded_at', 'type': 'TIMESTAMP'} 
+        ]
+    )
+    print(f"✅ Success! Loaded {len(df)} assets to BigQuery.")
+# ... (rest of the code remains the same)
+    except Exception as e:
+        print(f"🔥 CRITICAL BigQuery Load Error: Failed to load data. {e}")
+        # Hint for final manual check
+        if "Table has too many columns" in str(e):
+             print("\n💡 HINT: The BigQuery table might have an old schema. Try deleting the 'daily_market' table in the BigQuery console and re-running.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
     except Exception as e:
         print(f"🔥 CRITICAL BigQuery Load Error: Failed to load data. {e}")
         # Hint for final manual check
