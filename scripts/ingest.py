@@ -93,6 +93,11 @@
 
 
 
+
+
+
+
+
 import pandas as pd
 import pandas_gbq
 import requests
@@ -103,6 +108,7 @@ from google.oauth2 import service_account
 import time
 import sys
 import requests.exceptions
+import numpy as np # Added for robust casting
 
 # --- CONFIGURATION ---
 PROJECT_ID = 'loyal-weaver-471905-p9' 
@@ -193,6 +199,15 @@ def main():
     ]
     cols_to_keep = [col for col in desired_columns if col in df.columns]
     df = df[cols_to_keep]
+
+    # --- CRITICAL FIX: Explicitly cast float columns to prevent INT64 parsing errors ---
+    float_cols = ['current_price', 'market_cap', 'total_volume', 'high_24h', 'low_24h', 'circulating_supply', 'total_supply', 'ath', 'ath_change_percentage', 'price_change_percentage_24h']
+    for col_name in float_cols:
+        if col_name in df.columns:
+            # pd.to_numeric with errors='coerce' safely turns invalid strings into NaN
+            df[col_name] = pd.to_numeric(df[col_name], errors='coerce') 
+
+    # Add the load timestamp
     df['loaded_at'] = datetime.now()
     
     # 3. AUTHENTICATION & LOAD
@@ -215,7 +230,9 @@ def main():
             credentials=credentials,
             # Use the robust load_csv method for maximum stability
             api_method='load_csv', 
-            # Explicit Schema Definition
+            chunksize=1000, # Helps BigQuery parse large CSV strings
+            decimal='.', # Explicitly defines decimal separator
+            # Explicit Schema Definition (Ensuring FLOAT for all currency/volume fields)
             table_schema=[
                 {'name': 'id', 'type': 'STRING'},
                 {'name': 'symbol', 'type': 'STRING'},
@@ -239,6 +256,9 @@ def main():
         print(f"✅ Success! Loaded {len(df)} assets to BigQuery.")
     except Exception as e:
         print(f"🔥 CRITICAL BigQuery Load Error: Failed to load data. {e}")
+        # Hint for final manual check
+        if "Table has too many columns" in str(e):
+             print("\n💡 HINT: The BigQuery table might have an old schema. Try deleting the 'daily_market' table in the BigQuery console and re-running.")
         sys.exit(1)
 
 if __name__ == "__main__":
