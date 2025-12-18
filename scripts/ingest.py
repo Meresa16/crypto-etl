@@ -93,7 +93,6 @@
 
 
 
-
 import pandas as pd
 import pandas_gbq
 import requests
@@ -114,8 +113,8 @@ CREDENTIALS_PATH = 'gcp_key.json'
 # --- API CONSTANTS ---
 COINS_PER_PAGE = 250 
 BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
-RATE_LIMIT_DELAY = 1.5 
-ERROR_RETRY_DELAY = 10 
+RATE_LIMIT_DELAY = 1.5 # Delay between successful calls
+ERROR_RETRY_DELAY = 10 # Long delay after hitting a 429 error
 
 # --- FUNCTION: Fetch ALL Pages ---
 def fetch_all_crypto_data():
@@ -197,7 +196,7 @@ def main():
     df['loaded_at'] = datetime.now()
     
     # 3. AUTHENTICATION & LOAD
-    print(f"📦 Preparing to load {len(df)} records to BigQuery via InsertAll method...")
+    print(f"📦 Preparing to load {len(df)} records to BigQuery via load_csv method...")
     credentials = None
     if os.path.exists(CREDENTIALS_PATH):
         try:
@@ -206,7 +205,7 @@ def main():
             print("❌ CRITICAL ERROR: The gcp_key.json file is corrupt.")
             sys.exit(1)
     
-    # --- BEST PRACTICE FOR STABILITY: Use insert_all ---
+    # --- FINAL STABLE LOAD BLOCK ---
     try:
         pandas_gbq.to_gbq(
             df,
@@ -214,9 +213,9 @@ def main():
             project_id=PROJECT_ID,
             if_exists='append',
             credentials=credentials,
-            # Use the CSV-based API method for maximum stability on GitHub runners
-            api_method='insert_all', 
-            # Explicit Schema is essential for insert_all to know the BQ column types
+            # Use the robust load_csv method for maximum stability
+            api_method='load_csv', 
+            # Explicit Schema Definition
             table_schema=[
                 {'name': 'id', 'type': 'STRING'},
                 {'name': 'symbol', 'type': 'STRING'},
