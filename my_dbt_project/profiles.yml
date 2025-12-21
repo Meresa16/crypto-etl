@@ -7,5 +7,8 @@ my_dbt_project: # This must match the 'name' in your dbt_project.yml
       project: loyal-weaver-471905-p9
       dataset: dbt_prod
       threads: 1
-      keyfile: ../gcp_key.json # It looks for the key in the main folder
+      # --- FIX IS HERE ---
+      priority: interactive # Tells BQ to ignore cache and check immediately
+      # -------------------
+      keyfile: ../gcp_key.json
       location: US
