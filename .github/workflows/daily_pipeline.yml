@@ -1,0 +1,45 @@
+name: Daily Crypto Pipeline
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # Runs every day at 8:00 AM UTC
+  workflow_dispatch: # Allows you to run it manually from GitHub
+
+env:
+  PROJECT_ID: loyal-weaver-471905-p9 # <--- Your specific ID
+  GCP_KEY_FILE: ./gcp_key.json
+
+jobs:
+  run_pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      # --- FIX IS HERE: Forced upgrade and clean install ---
+      - name: Install Dependencies (Fixed)
+        run: pip install --upgrade --no-cache-dir pandas pandas-gbq dbt-bigquery requests
+      # ----------------------------------------------------
+
+      - name: Create Key File
+        env:
+          GCP_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          python -c "import os; open('gcp_key.json', 'w').write(os.environ['GCP_KEY'])"
+      
+      - name: Run Extraction Script
+        run: python scripts/ingest.py
+
+      - name: Run dbt
+        working-directory: ./my_dbt_project
+        run: |
+          dbt deps
+          dbt run --profiles-dir .
+        env:
+          GCP_PROJECT: ${{ env.PROJECT_ID }}

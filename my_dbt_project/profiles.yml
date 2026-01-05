@@ -1,0 +1,14 @@
+my_dbt_project: # This must match the 'name' in your dbt_project.yml
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: loyal-weaver-471905-p9
+      dataset: dbt_prod
+      threads: 1
+      # --- FIX IS HERE ---
+      priority: interactive # Tells BQ to ignore cache and check immediately
+      # -------------------
+      keyfile: ../gcp_key.json
+      location: US
