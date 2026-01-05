@@ -496,6 +496,22 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import pandas as pd
 import pandas_gbq
 import requests
@@ -516,8 +532,16 @@ CREDENTIALS_PATH = 'gcp_key.json'
 
 BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
 COINS_PER_PAGE = 250 
-SAFE_DELAY = 10.0       
+SAFE_DELAY = 6.0  # Increased slightly to be safe with huge lists
 MAX_RETRIES = 5        
+
+# These are the ONLY columns BigQuery will ever see
+DESIRED_COLUMNS = [
+    'id', 'symbol', 'name', 'image', 'current_price', 'market_cap', 
+    'market_cap_rank', 'total_volume', 'high_24h', 'low_24h', 
+    'price_change_percentage_24h', 'circulating_supply', 'total_supply', 
+    'ath', 'ath_change_percentage', 'last_updated'
+]
 
 def fetch_all_crypto_data():
     all_data = []
@@ -530,13 +554,13 @@ def fetch_all_crypto_data():
         
         params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': COINS_PER_PAGE, 'page': page}
         retry_count = 0
-        backoff_time = 60
+        backoff_time = 45 # Starting backoff
 
         while retry_count < MAX_RETRIES:
             try:
                 response = requests.get(BASE_URL, params=params, headers=headers, timeout=60)
                 if response.status_code == 429:
-                    print(f"\n⚠️ Rate limit (429) on page {page}. Waiting {backoff_time}s...")
+                    print(f"\n⚠️ Rate limit (429). Waiting {backoff_time}s...")
                     time.sleep(backoff_time)
                     retry_count += 1
                     backoff_time *= 2
@@ -545,7 +569,7 @@ def fetch_all_crypto_data():
                 response.raise_for_status()
                 page_data = response.json()
                 
-                if not page_data or page > 80: # Safeguard
+                if not page_data or page > 100: # CoinGecko has ~15k coins
                     print(f"\n✅ Extraction Complete. Total: {len(all_data)}")
                     return all_data
                 
@@ -595,25 +619,16 @@ def main():
     raw_data = fetch_all_crypto_data()
     if not raw_data: return
 
-    # 2. TRANSFORM
-    df = pd.DataFrame(raw_data)
+    # 2. TRANSFORM (CRITICAL FIX: Clean the list of dictionaries directly)
+    cleaned_list = []
+    for coin in raw_data:
+        # Create a new dictionary containing ONLY the allowed keys
+        # This physically deletes 'roi' and anything else nested
+        clean_coin = {key: coin[key] for key in DESIRED_COLUMNS if key in coin}
+        cleaned_list.append(clean_coin)
     
-    # --- CRITICAL FIX: Explicitly Drop the 'roi' column if it exists ---
-    if 'roi' in df.columns:
-        df = df.drop(columns=['roi'])
-        print("🗑️ Dropped nested 'roi' field to ensure BigQuery compatibility.")
-
-    # Select only the columns that match our schema
-    desired_columns = [
-        'id', 'symbol', 'name', 'image', 'current_price', 'market_cap', 
-        'market_cap_rank', 'total_volume', 'high_24h', 'low_24h', 
-        'price_change_percentage_24h', 'circulating_supply', 'total_supply', 
-        'ath', 'ath_change_percentage', 'last_updated'
-    ]
-    
-    # Ensure we only keep columns that exist in the DataFrame
-    cols_to_keep = [c for c in desired_columns if c in df.columns]
-    df = df[cols_to_keep].copy()
+    df = pd.DataFrame(cleaned_list)
+    print(f"📊 DataFrame initialized with columns: {df.columns.tolist()}")
 
     # Numeric formatting
     float_cols = ['current_price', 'market_cap', 'total_volume', 'high_24h', 'low_24h', 
@@ -629,10 +644,11 @@ def main():
     credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
 
     # 4. LOAD TO STAGING
-    print(f"📤 Uploading {len(df)} records to Staging...")
+    print(f"📤 Uploading {len(df)} records to Staging Table...")
     try:
+        # We pass ONLY the cleaned columns here
         pandas_gbq.to_gbq(
-            df,
+            df[DESIRED_COLUMNS + ['loaded_at']], 
             destination_table=f"{DATASET_ID}.{STAGING_TABLE_ID}",
             project_id=PROJECT_ID,
             if_exists='replace',
@@ -661,10 +677,12 @@ def main():
         
         # 5. MERGE
         run_cdc_merge(credentials)
-        print("✅ Pipeline Success! Data is now in BigQuery.")
+        print("✅ Pipeline Success! Check BigQuery now.")
         
     except Exception as e:
         print(f"🔥 BigQuery Error: {e}")
+        # Final sanity check: print columns if it fails
+        print(f"Columns present at failure: {df.columns.tolist()}")
 
 if __name__ == "__main__":
     main()
