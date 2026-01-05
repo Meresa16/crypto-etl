@@ -296,7 +296,7 @@ CREDENTIALS_PATH = 'gcp_key.json'
 
 # --- API LIMIT TUNING (2025/2026 Standards) ---
 # If you don't have a key, set this to None (but you will hit 429 errors much faster)
-COINGECKO_API_KEY = 'YOUR_API_KEY_HERE' 
+# COINGECKO_API_KEY = 'YOUR_API_KEY_HERE' 
 BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
 COINS_PER_PAGE = 250 
 
@@ -310,8 +310,8 @@ def fetch_all_crypto_data():
     page = 1
     
     headers = {'User-Agent': 'Crypto-ETL-Pipeline/1.0'}
-    if COINGECKO_API_KEY:
-        headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
+    # if COINGECKO_API_KEY:
+    #     headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
 
     print(f"🚀 Starting Extraction from CoinGecko...")
 
