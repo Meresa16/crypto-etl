@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: crypto_raw
+    database: loyal-weaver-471905-p9
+    tables:
+      - name: daily_market
+        # This config block needs to contain the freshness
+        config:
+          loaded_at_field: loaded_at
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
