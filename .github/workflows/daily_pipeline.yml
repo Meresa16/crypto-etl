@@ -36,7 +36,7 @@ jobs:
       - name: Run Extraction Script
         run: python scripts/ingest.py
 
-      - name: Run dbt
+      - name: dbt run --select fact_daily_trends --full-refresh
         working-directory: ./my_dbt_project
         run: |
           dbt deps
